@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASTRONAVIS: 2D ISS Medical Rescue Simulation</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        space: {
+                            900: '#020617',
+                            800: '#090d16',
+                            700: '#111827',
+                            600: '#1f2937',
+                        },
+                        neon: {
+                            blue: '#00f2fe',
+                            cyan: '#4facfe',
+                            red: '#ff3366',
+                            green: '#00ffcc',
+                            gold: '#ffbb00',
+                            wood: '#8b5a2b'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <!-- FontAwesome & Chart.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #020617; color: #f8fafc; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #020617; }
+        ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #374151; }
+        .glass-panel {
+            background: rgba(9, 13, 22, 0.9);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(0, 242, 254, 0.2);
+        }
+        .glass-alert {
+            background: rgba(255, 51, 102, 0.12);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 51, 102, 0.5);
+            box-shadow: 0 0 30px rgba(255, 51, 102, 0.25);
+        }
+        @keyframes alert-pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(255, 51, 102, 0.4); border-color: rgba(255, 51, 102, 0.6); }
+            50% { box-shadow: 0 0 50px rgba(255, 51, 102, 0.9); border-color: rgba(255, 51, 102, 1); }
+        }
+        .animate-alert { animation: alert-pulse 1.5s infinite; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col overflow-x-hidden">
+
+    <!-- Top Command Navigation Bar -->
+    <header class="glass-panel sticky top-0 z-50 px-6 py-4 flex flex-wrap justify-between items-center border-b border-slate-800">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-blue to-blue-600 flex items-center justify-center shadow-lg shadow-neon-blue/30">
+                <i class="fa-solid fa-satellite text-space-900 text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold tracking-wider text-lg text-transparent bg-clip-text bg-gradient-to-r from-neon-blue to-cyan-400">ASTRONAVIS 2D</h1>
+                <p class="text-xs text-slate-400 font-mono">ISS MEDICAL RESCUE SIMULATION v11.0</p>
+            </div>
+        </div>
+
+        <!-- System Status Banner -->
+        <div id="systemStatusBanner" class="flex items-center space-x-3 px-4 py-2 rounded-xl bg-slate-800/80 border border-slate-700 transition-all duration-300 my-2 sm:my-0">
+            <span id="statusIndicatorDot" class="w-3 h-3 rounded-full bg-neon-green animate-ping"></span>
+            <span id="statusIndicatorText" class="text-xs font-mono font-semibold tracking-wider text-neon-green">ALL 15 SYSTEMS NOMINAL</span>
+        </div>
+
+        <!-- View Controls -->
+        <div class="flex items-center space-x-2">
+            <button onclick="switchView('dashboard')" id="btnDashboard" class="px-3 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider bg-neon-blue text-space-900 transition shadow-lg shadow-neon-blue/20 flex items-center space-x-1.5">
+                <i class="fa-solid fa-gauge-high"></i>
+                <span>Dashboard</span>
+            </button>
+            <button onclick="switchView('flowchart')" id="btnFlowchart" class="px-3 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider bg-slate-800 hover:bg-slate-700 text-slate-200 transition border border-slate-700 flex items-center space-x-1.5">
+                <i class="fa-solid fa-sitemap"></i>
+                <span>Location Flow Chart</span>
+            </button>
+            <button onclick="switchView('analytics')" id="btnAnalytics" class="px-3 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider bg-slate-800 hover:bg-slate-700 text-slate-200 transition border border-slate-700 flex items-center space-x-1.5">
+                <i class="fa-solid fa-chart-line"></i>
+                <span>Analytics</span>
+            </button>
+            <button onclick="triggerEmergencyManual()" class="px-2.5 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider bg-neon-red/20 text-neon-red border border-neon-red/40 hover:bg-neon-red/30 transition flex items-center" title="Trigger Emergency">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Application Container -->
+    <main class="flex-grow p-4 md:p-8 max-w-7xl mx-auto w-full">
+
+        <!-- VIEW 1: 15 HEALTH PARAMETERS DASHBOARD -->
+        <section id="viewDashboard" class="space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-800/40 p-6 rounded-2xl border border-slate-800 gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold tracking-tight text-white flex items-center space-x-3">
+                        <i class="fa-solid fa-heart-pulse text-neon-blue"></i>
+                        <span>Astronaut Physiological Telemetry (15 Parameters)</span>
+                    </h2>
+                    <p class="text-sm text-slate-400 mt-1">Real-time biological monitoring suite restricted to NASA public health awareness standards. Adjust any slider outside its security threshold to trigger the 2D room-to-room rescue simulation.</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button onclick="resetAllParameters()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 transition border border-slate-600">
+                        <i class="fa-solid fa-rotate-right mr-1.5"></i> Reset All Nominal
+                    </button>
+                    <button onclick="randomizeParameters()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition border border-blue-500/30">
+                        <i class="fa-solid fa-shuffle mr-1.5"></i> Random Fluctuate
+                    </button>
+                </div>
+            </div>
+
+            <!-- Parameters Grid (15 Cards) -->
+            <div id="parametersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <!-- Populated via JS -->
+            </div>
+        </section>
+
+        <!-- VIEW 2: ISS LOCATION & MISSION FLOW CHART -->
+        <section id="viewFlowchart" class="hidden space-y-6">
+            <div class="glass-panel p-6 rounded-2xl">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="px-3 py-1 rounded-full text-xs font-mono font-bold bg-neon-blue/20 text-neon-blue border border-neon-blue/40">ISS MODULE PATHWAY</span>
+                            <span class="text-xs text-slate-400 font-mono">ROOM-TO-ROOM LOCATION FLOW</span>
+                        </div>
+                        <h2 class="text-2xl font-bold text-white mt-2">Astronaut Location & Rescue Flow Chart</h2>
+                        <p class="text-sm text-slate-400 mt-1">Tracing the exact room-by-room journey from initial telemetry anomaly to Medical Bay Cabinet #4 and ingestion.</p>
+                    </div>
+                    <button onclick="switchView('dashboard')" class="px-4 py-2 rounded-xl text-xs font-semibold bg-neon-blue text-space-900 transition shadow-lg shadow-neon-blue/20">
+                        <i class="fa-solid fa-arrow-left mr-1.5"></i> Back to Dashboard
+                    </button>
+                </div>
+
+                <!-- ISS Location Flow Chart Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 relative">
+                    
+                    <!-- Step 1: Lab Start -->
+                    <div class="bg-slate-900/90 p-5 rounded-xl border border-slate-700 relative group hover:border-neon-blue transition">
+                        <div class="absolute -top-3 -left-3 w-8 h-8 rounded-lg bg-neon-blue text-space-900 font-bold font-mono text-sm flex items-center justify-center shadow-lg">01</div>
+                        <div class="flex items-center space-x-3 mb-3">
+                            <div class="w-10 h-10 rounded-xl bg-neon-blue/20 text-neon-blue flex items-center justify-center border border-neon-blue/30">
+                                <i class="fa-solid fa-flask"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm text-white">Habitation Lab</h3>
+                                <p class="text-[10px] text-slate-400 font-mono">Starting Position</p>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">Astronaut is stationed conducting research when telemetry breach occurs in 15 parameters.</p>
+                    </div>
+
+                    <!-- Step 2: Node 3 Corridor -->
+                    <div class="bg-slate-900/90 p-5 rounded-xl border border-slate-700 relative group hover:border-cyan-400 transition">
+                        <div class="absolute -top-3 -left-3 w-8 h-8 rounded-lg bg-cyan-400 text-space-900 font-bold font-mono text-sm flex items-center justify-center shadow-lg">02</div>
+                        <div class="flex items-center space-x-3 mb-3">
+                            <div class="w-10 h-10 rounded-xl bg-cyan-400/20 text-cyan-400 flex items-center justify-center border border-cyan-400/30">
+                                <i class="fa-solid fa-arrows-split-up-and-left"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm text-white">Node 3 Corridor</h3>
+                                <p class="text-[10px] text-slate-400 font-mono">Transit Zone</p>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">Traversing through zero-G interconnecting corridor toward the forward medical compartment.</p>
+                    </div>
+
+                    <!-- Step 3: Medical Bay Arrival -->
+                    <div class="bg-slate-900/90 p-5 rounded-xl border border-slate-700 relative group hover:border-neon-gold transition">
+                        <div class="absolute -top-3 -left-3 w-8 h-8 rounded-lg bg-neon-gold text-space-900 font-bold font-mono text-sm flex items-center justify-center shadow-lg">03</div>
+                        <div class="flex items-center space-x-3 mb-3">
+                            <div class="w-10 h-10 rounded-xl bg-neon-gold/20 text-neon-gold flex items-center justify-center border border-neon-gold/30">
+                                <i class="fa-solid fa-door-open"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm text-white">Medical Bay #4</h3>
+                                <p class="text-[10px] text-slate-400 font-mono">Destination Room</p>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">Arriving at Medical Bay storage locker unit. Cabinet #4 automatically unlocks.</p>
+                    </div>
+
+                    <!-- Step 4: Medicine Retrieval -->
+                    <div class="bg-slate-900/90 p-5 rounded-xl border border-slate-700 relative group hover:border-neon-green transition">
+                        <div class="absolute -top-3 -left-3 w-8 h-8 rounded-lg bg-neon-green text-space-900 font-bold font-mono text-sm flex items-center justify-center shadow-lg">04</div>
+                        <div class="flex items-center space-x-3 mb-3">
+                            <div class="w-10 h-10 rounded-xl bg-neon-green/20 text-neon-green flex items-center justify-center border border-neon-green/30">
+                                <i class="fa-solid fa-pills"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm text-white">CardioVial-X Pickup</h3>
+                                <p class="text-[10px] text-slate-400 font-mono">Prescription Ingestion</p>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">Retrieving exact prescribed therapeutic compound and drinking per NASA protocol.</p>
+                    </div>
+
+                    <!-- Step 5: Verification & Stabilization -->
+                    <div class="bg-slate-900/90 p-5 rounded-xl border border-slate-700 relative group hover:border-emerald-400 transition">
+                        <div class="absolute -top-3 -left-3 w-8 h-8 rounded-lg bg-emerald-400 text-space-900 font-bold font-mono text-sm flex items-center justify-center shadow-lg">05</div>
+                        <div class="flex items-center space-x-3 mb-3">
+                            <div class="w-10 h-10 rounded-xl bg-emerald-400/20 text-emerald-400 flex items-center justify-center border border-emerald-400/30">
+                                <i class="fa-solid fa-chart-line"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm text-white">Telemetry Recovery</h3>
+                                <p class="text-[10px] text-slate-400 font-mono">Homeostasis Restored</p>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">Confirmation prompt routes to stabilized Analytics curves and green telemetry status.</p>
+                    </div>
+
+                </div>
+
+                <!-- Direct Action Banner -->
+                <div class="mt-8 p-5 rounded-xl bg-slate-900/80 border border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl bg-neon-blue/20 text-neon-blue flex items-center justify-center border border-neon-blue/30">
+                            <i class="fa-solid fa-circle-question"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-sm text-white">Ready to confirm medication ingestion?</h4>
+                            <p class="text-xs text-slate-400 font-mono">Triggers post-rescue analytics graphs and returns all 15 parameters to nominal.</p>
+                        </div>
+                    </div>
+                    <button onclick="showPostSimulationModal()" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-neon-green text-space-900 hover:bg-emerald-400 transition shadow-lg shadow-neon-green/20">
+                        <i class="fa-solid fa-check mr-1.5"></i> Open Verification Modal
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW 3: POST-SIMULATION ANALYTICS & GRAPHS -->
+        <section id="viewAnalytics" class="hidden space-y-6">
+            <div class="glass-panel p-6 rounded-2xl">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="px-3 py-1 rounded-full text-xs font-mono font-bold bg-neon-green/20 text-neon-green border border-neon-green/40">POST-RECOVERY STABILIZED</span>
+                            <span class="text-xs text-slate-400 font-mono">HOMEOSTASIS RESTORED</span>
+                        </div>
+                        <h2 class="text-2xl font-bold text-white mt-2">Mission Telemetry Analytics & Recovery Curves</h2>
+                        <p class="text-sm text-slate-400 mt-1">All 15 physiological parameters have successfully returned to optimal green safety zones following medical intervention.</p>
+                    </div>
+                    <button onclick="switchView('dashboard')" class="px-4 py-2 rounded-xl text-xs font-semibold bg-neon-blue text-space-900 transition shadow-lg shadow-neon-blue/20">
+                        <i class="fa-solid fa-arrow-left mr-1.5"></i> Return to Live Dashboard
+                    </button>
+                </div>
+
+                <!-- Chart.js Graphs Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-slate-900/60 p-5 rounded-xl border border-slate-800">
+                        <h3 class="text-sm font-bold text-slate-300 mb-3 flex items-center justify-between">
+                            <span><i class="fa-solid fa-chart-area text-neon-blue mr-2"></i> Cardiovascular & Respiratory Recovery</span>
+                            <span class="text-xs text-neon-green font-mono">Nominal</span>
+                        </h3>
+                        <div class="relative h-64 w-full">
+                            <canvas id="cardioChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-slate-900/60 p-5 rounded-xl border border-slate-800">
+                        <h3 class="text-sm font-bold text-slate-300 mb-3 flex items-center justify-between">
+                            <span><i class="fa-solid fa-chart-line text-cyan-400 mr-2"></i> Metabolic, Stress & Intracranial Metrics</span>
+                            <span class="text-xs text-neon-green font-mono">Nominal</span>
+                        </h3>
+                        <div class="relative h-64 w-full">
+                            <canvas id="metabolicChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Full Parameters Status Table -->
+                <div class="mt-6 bg-slate-900/60 p-5 rounded-xl border border-slate-800">
+                    <h3 class="text-sm font-bold text-slate-300 mb-4">Complete 15-Parameter Status Verification</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs text-slate-300 font-mono">
+                            <thead class="bg-slate-800/80 text-slate-400 uppercase text-[10px]">
+                                <tr>
+                                    <th class="p-3">Parameter Name</th>
+                                    <th class="p-3">Category</th>
+                                    <th class="p-3">Current Value</th>
+                                    <th class="p-3">Safety Range</th>
+                                    <th class="p-3">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analyticsTableBody" class="divide-y divide-slate-800">
+                                <!-- Populated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- POST-SIMULATION INTERACTIVE VERIFICATION MODAL -->
+    <div id="postSimModal" class="fixed inset-0 z-50 bg-space-900/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="glass-panel p-8 rounded-2xl max-w-md w-full border border-neon-blue/40 shadow-2xl text-center space-y-6">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-neon-blue to-cyan-500 mx-auto flex items-center justify-center text-space-900 text-2xl shadow-lg shadow-neon-blue/40">
+                <i class="fa-solid fa-pills"></i>
+            </div>
+            <div>
+                <h3 class="text-xl font-bold text-white">Medical Protocol Verification</h3>
+                <p id="modalAnomalyText" class="text-xs text-slate-300 mt-2 font-mono">Room-to-room 2D navigation, wooden bulkhead door handling, cabinet retrieval, and medication ingestion completed.</p>
+                <p class="text-sm font-semibold text-neon-blue mt-4">Have you completed taking your medication?</p>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="handleModalResponse(true)" class="px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider bg-neon-green text-space-900 hover:bg-emerald-400 transition shadow-lg shadow-neon-green/20">
+                    <i class="fa-solid fa-check mr-1.5"></i> Yes, Completed
+                </button>
+                <button onclick="handleModalResponse(false)" class="px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider bg-neon-red/20 text-neon-red border border-neon-red/40 hover:bg-neon-red/30 transition">
+                    <i class="fa-solid fa-rotate-left mr-1.5"></i> No, Replay Sim
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Notification Message Box -->
+    <div id="messageBox" class="fixed top-20 right-6 z-50 transform translate-x-full transition-transform duration-300 max-w-sm w-full glass-alert p-4 rounded-xl shadow-2xl flex items-start space-x-3">
+        <div class="text-neon-red text-xl mt-0.5">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <div class="flex-grow">
+            <h4 id="msgTitle" class="text-sm font-bold text-white">HEALTH ALERT TRIGGERED</h4>
+            <p id="msgDesc" class="text-xs text-slate-300 mt-1 font-mono">Physiological threshold breached.</p>
+        </div>
+        <button onclick="closeMessageBox()" class="text-slate-400 hover:text-white text-sm">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // --- 15 HEALTH PARAMETERS DEFINITION ---
+        const parameters = [
+            { id: 'bp_sys', name: 'BP Systolic', unit: 'mmHg', value: 120, min: 90, max: 140, category: 'Cardiovascular', icon: 'fa-heart-pulse', desc: 'Arterial pressure during contraction (NASA Flight Limits)' },
+            { id: 'bp_dia', name: 'BP Diastolic', unit: 'mmHg', value: 80, min: 60, max: 90, category: 'Cardiovascular', icon: 'fa-heart', desc: 'Arterial pressure between heartbeats' },
+            { id: 'heart_rate', name: 'Heart Rate', unit: 'BPM', value: 72, min: 55, max: 100, category: 'Cardiovascular', icon: 'fa-stethoscope', desc: 'Cardiac contractions per minute' },
+            { id: 'spo2', name: 'Oxygen Saturation (SpO2)', unit: '%', value: 98, min: 94, max: 100, category: 'Respiratory', icon: 'fa-lungs', desc: 'Arterial blood oxygen saturation' },
+            { id: 'temp', name: 'Core Body Temperature', unit: '°C', value: 36.8, min: 36.1, max: 37.8, category: 'Metabolic', icon: 'fa-temperature-high', desc: 'Internal core temperature' },
+            { id: 'resp_rate', name: 'Respiration Rate', unit: 'bpm', value: 16, min: 12, max: 20, category: 'Respiratory', icon: 'fa-wind', desc: 'Breaths per minute' },
+            { id: 'cortisol', name: 'Cortisol Levels', unit: 'µg/dL', value: 14, min: 5, max: 23, category: 'Endocrine/Stress', icon: 'fa-brain', desc: 'Primary stress hormone indicator' },
+            { id: 'bone_density', name: 'Bone Density Index', unit: 'g/cm²', value: 1.15, min: 0.95, max: 1.40, category: 'Musculoskeletal', icon: 'fa-bone', desc: 'Microgravity skeletal mass retention' },
+            { id: 'radiation', name: 'Radiation Exposure', unit: 'mSv/day', value: 0.4, min: 0.0, max: 1.0, category: 'Environmental', icon: 'fa-radiation', desc: 'Daily ionizing radiation absorption' },
+            { id: 'icp', name: 'Intracranial Pressure', unit: 'mmHg', value: 12, min: 7, max: 15, category: 'Neurological', icon: 'fa-head-side-virus', desc: 'Cranial pressure (SANS risk)' },
+            { id: 'cardiac_output', name: 'Cardiac Output', unit: 'L/min', value: 5.2, min: 4.0, max: 8.0, category: 'Cardiovascular', icon: 'fa-gauge', desc: 'Blood pumped per minute' },
+            { id: 'blood_ph', name: 'Blood pH Balance', unit: 'pH', value: 7.40, min: 7.35, max: 7.45, category: 'Metabolic', icon: 'fa-flask', desc: 'Arterial blood acid-base balance' },
+            { id: 'electrolytes', name: 'Electrolyte Balance', unit: 'mmol/L', value: 140, min: 135, max: 145, category: 'Metabolic', icon: 'fa-bolt', desc: 'Sodium/potassium serum balance' },
+            { id: 'fatigue_index', name: 'Fatigue Index', unit: '%', value: 20, min: 0, max: 50, category: 'Neurological', icon: 'fa-battery-half', desc: 'Neuromuscular fatigue level' },
+            { id: 'immune_cells', name: 'Immune Cell Count', unit: '10³/µL', value: 6.5, min: 4.0, max: 11.0, category: 'Immunological', icon: 'fa-shield-virus', desc: 'White blood cell count' }
+        ];
+
+        let activeView = 'dashboard';
+        let emergencyTriggered = false;
+        let triggeringParam = null;
+
+        // --- APP INITIALIZATION ---
+        window.addEventListener('DOMContentLoaded', () => {
+            renderDashboard();
+            initCharts();
+            renderAnalyticsTable();
+        });
+
+        // --- VIEW CONTROLLER ---
+        function switchView(viewName) {
+            activeView = viewName;
+            document.getElementById('viewDashboard').classList.add('hidden');
+            document.getElementById('viewFlowchart').classList.add('hidden');
+            document.getElementById('viewAnalytics').classList.add('hidden');
+
+            document.getElementById('btnDashboard').className = 'px-3 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider bg-slate-800 text-slate-200 transition border border-slate-700 flex items-center space-x-1.5';
+            document.getElementById('btnFlowchart').className = 'px-3 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider bg-slate-800 text-slate-200 transition border border-slate-700 flex items-center space-x-1.5';
+            document.getElementById('btnAnalytics').className = 'px-3 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider bg-slate-800 text-slate-200 transition border border-slate-700 flex items-center space-x-1.5';
+
+            if (viewName === 'dashboard') {
+                document.getElementById('viewDashboard').classList.remove('hidden');
+                document.getElementById('btnDashboard').className = 'px-3 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider bg-neon-blue text-space-900 transition shadow-lg shadow-neon-blue/20 flex items-center space-x-1.5';
+            } else if (viewName === 'flowchart') {
+                document.getElementById('viewFlowchart').classList.remove('hidden');
+                document.getElementById('btnFlowchart').className = 'px-3 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider bg-neon-blue text-space-900 transition shadow-lg shadow-neon-blue/20 flex items-center space-x-1.5';
+            } else if (viewName === 'analytics') {
+                document.getElementById('viewAnalytics').classList.remove('hidden');
+                document.getElementById('btnAnalytics').className = 'px-3 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider bg-neon-blue text-space-900 transition shadow-lg shadow-neon-blue/20 flex items-center space-x-1.5';
+            }
+        }
+
+        // --- DASHBOARD RENDERING ---
+        function renderDashboard() {
+            const grid = document.getElementById('parametersGrid');
+            grid.innerHTML = '';
+            let hasAnomaly = false;
+
+            parameters.forEach(p => {
+                const isOutOfBounds = p.value < p.min || p.value > p.max;
+                if (isOutOfBounds) hasAnomaly = true;
+
+                const card = document.createElement('div');
+                card.className = `glass-panel p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden ${isOutOfBounds ? 'animate-alert bg-neon-red/10' : 'border-slate-800 hover:border-slate-700'}`;
+                
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-xl ${isOutOfBounds ? 'bg-neon-red/20 text-neon-red border border-neon-red/40' : 'bg-slate-800 text-neon-blue border border-slate-700'} flex items-center justify-center">
+                                <i class="fa-solid ${p.icon}"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm text-white">${p.name}</h3>
+                                <p class="text-[10px] text-slate-400 font-mono">${p.category}</p>
+                            </div>
+                        </div>
+                        <span class="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold ${isOutOfBounds ? 'bg-neon-red/20 text-neon-red border border-neon-red/40' : 'bg-neon-green/10 text-neon-green border border-neon-green/30'}">
+                            ${isOutOfBounds ? 'ALERT (OUT OF BOUNDS)' : 'OPTIMAL'}
+                        </span>
+                    </div>
+
+                    <div class="my-4 flex justify-between items-baseline">
+                        <div class="font-mono text-2xl font-bold text-white">
+                            <span id="val_${p.id}">${p.value}</span> <span class="text-xs text-slate-400">${p.unit}</span>
+                        </div>
+                        <div class="text-[10px] text-slate-400 font-mono">
+                            Safe: [${p.min} - ${p.max}]
+                        </div>
+                    </div>
+
+                    <div class="space-y-1">
+                        <input type="range" min="${p.min * 0.5}" max="${p.max * 1.5}" step="${p.value < 10 ? 0.05 : 1}" value="${p.value}" 
+                            oninput="updateParameterValue('${p.id}', this.value)"
+                            class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-neon-blue">
+                        <p class="text-[10px] text-slate-500 truncate">${p.desc}</p>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            updateSystemStatusBanner(hasAnomaly);
+        }
+
+        function updateParameterValue(id, val) {
+            const param = parameters.find(p => p.id === id);
+            if (param) {
+                param.value = Number(val);
+                renderDashboard();
+                if ((param.value < param.min || param.value > param.max) && !emergencyTriggered) {
+                    triggeringParam = param;
+                    triggerEmergency(param);
+                }
+            }
+        }
+
+        function updateSystemStatusBanner(hasAnomaly) {
+            const banner = document.getElementById('systemStatusBanner');
+            const dot = document.getElementById('statusIndicatorDot');
+            const text = document.getElementById('statusIndicatorText');
+
+            if (hasAnomaly) {
+                banner.className = 'flex items-center space-x-3 px-4 py-2 rounded-xl bg-neon-red/25 border border-neon-red/60 animate-alert';
+                dot.className = 'w-3 h-3 rounded-full bg-neon-red animate-ping';
+                text.className = 'text-xs font-mono font-semibold tracking-wider text-neon-red';
+                text.textContent = 'SECURITY ZONE BREACH - EMERGENCY!';
+            } else {
+                banner.className = 'flex items-center space-x-3 px-4 py-2 rounded-xl bg-slate-800/80 border border-slate-700';
+                dot.className = 'w-3 h-3 rounded-full bg-neon-green animate-ping';
+                text.className = 'text-xs font-mono font-semibold tracking-wider text-neon-green';
+                text.textContent = 'ALL 15 SYSTEMS NOMINAL';
+                emergencyTriggered = false;
+            }
+        }
+
+        function triggerEmergency(param) {
+            emergencyTriggered = true;
+            showNotification(`CRITICAL ANOMALY: ${param.name} reached ${param.value} ${param.unit}. Opening ISS location flowchart.`);
+            switchView('flowchart');
+        }
+
+        function triggerEmergencyManual() {
+            parameters[0].value = 175;
+            triggeringParam = parameters[0];
+            renderDashboard();
+            triggerEmergency(parameters[0]);
+        }
+
+        function resetAllParameters() {
+            parameters.forEach(p => {
+                p.value = Number(((p.min + p.max) / 2).toFixed(1));
+            });
+            emergencyTriggered = false;
+            renderDashboard();
+            showNotification('All 15 telemetry parameters reset to nominal baseline.', 'SYSTEM RESET');
+        }
+
+        function showNotification(desc, title = "HEALTH ALERT TRIGGERED") {
+            document.getElementById('msgTitle').textContent = title;
+            document.getElementById('msgDesc').textContent = desc;
+            const box = document.getElementById('messageBox');
+            box.classList.remove('translate-x-full');
+            setTimeout(() => closeMessageBox(), 6000);
+        }
+
+        function closeMessageBox() {
+            document.getElementById('messageBox').classList.add('translate-x-full');
+        }
+
+
+        // --- POST-SIMULATION VERIFICATION MODAL ---
+        function showPostSimulationModal() {
+            document.getElementById('modalAnomalyText').textContent = `ISS room-to-room route verified. Medical Bay Cabinet #4 accessed and treatment ingested.`;
+            document.getElementById('postSimModal').classList.remove('hidden');
+        }
+
+        function handleModalResponse(didTakeMedicine) {
+            document.getElementById('postSimModal').classList.add('hidden');
+            if (didTakeMedicine) {
+                parameters.forEach(p => {
+                    p.value = Number(((p.min + p.max) / 2).toFixed(1));
+                });
+                emergencyTriggered = false;
+                renderDashboard();
+                renderAnalyticsTable();
+                updateCharts();
+                switchView('analytics');
+                showNotification('Treatment confirmed. All 15 physiological telemetry parameters normalized.', 'MISSION RECOVERY SUCCESS');
+            } else {
+                showNotification('Treatment not confirmed. Re-reviewing ISS location flowchart.', 'PROTOCOL REPLAY');
+                switchView('flowchart');
+            }
+        }
+
+
+        // --- CHART.JS ANALYTICS & RECOVERY CURVES ---
+        let cardioChartInstance = null;
+        let metabolicChartInstance = null;
+
+        function initCharts() {
+            const ctxCardio = document.getElementById('cardioChart').getContext('2d');
+            cardioChartInstance = new Chart(ctxCardio, {
+                type: 'line',
+                data: {
+                    labels: ['T-5m', 'T-4m', 'T-3m (Breach)', 'T-2m (Flow Check)', 'T-1m (Treatment)', 'Now (Normalized)'],
+                    datasets: [
+                        {
+                            label: 'Heart Rate (BPM)',
+                            data: [72, 74, 118, 132, 98, 72],
+                            borderColor: '#00f2fe',
+                            backgroundColor: 'rgba(0, 242, 254, 0.12)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'BP Systolic (mmHg)',
+                            data: [120, 122, 165, 178, 132, 120],
+                            borderColor: '#ff3366',
+                            backgroundColor: 'rgba(255, 51, 102, 0.12)',
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#cbd5e1', font: { family: 'Inter', size: 10 } } } },
+                    scales: {
+                        x: { ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    }
+                }
+            });
+
+            const ctxMetabolic = document.getElementById('metabolicChart').getContext('2d');
+            metabolicChartInstance = new Chart(ctxMetabolic, {
+                type: 'line',
+                data: {
+                    labels: ['T-5m', 'T-4m', 'T-3m (Breach)', 'T-2m (Flow Check)', 'T-1m (Treatment)', 'Now (Normalized)'],
+                    datasets: [
+                        {
+                            label: 'Cortisol Levels (µg/dL)',
+                            data: [14, 15, 27, 30, 19, 14],
+                            borderColor: '#00ffcc',
+                            backgroundColor: 'rgba(0, 255, 204, 0.12)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Oxygen Saturation SpO2 (%)',
+                            data: [98, 97, 91, 88, 95, 98],
+                            borderColor: '#4facfe',
+                            backgroundColor: 'rgba(79, 172, 254, 0.12)',
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#cbd5e1', font: { family: 'Inter', size: 10 } } } },
+                    scales: {
+                        x: { ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    }
+                }
+            });
+        }
+
+        function updateCharts() {
+            if (cardioChartInstance && metabolicChartInstance) {
+                cardioChartInstance.update();
+                metabolicChartInstance.update();
+            }
+        }
+
+        function renderAnalyticsTable() {
+            const tbody = document.getElementById('analyticsTableBody');
+            tbody.innerHTML = '';
+
+            parameters.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-800/40 transition';
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-white flex items-center space-x-2">
+                        <i class="fa-solid ${p.icon} text-neon-blue"></i>
+                        <span>${p.name}</span>
+                    </td>
+                    <td class="p-3 text-slate-400">${p.category}</td>
+                    <td class="p-3 font-semibold text-neon-green">${p.value} ${p.unit}</td>
+                    <td class="p-3 text-slate-400">[${p.min} - ${p.max}]</td>
+                    <td class="p-3">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neon-green/20 text-neon-green border border-neon-green/40">
+                            STABLE / OPTIMAL
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>
